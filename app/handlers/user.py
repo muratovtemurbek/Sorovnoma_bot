@@ -1,6 +1,6 @@
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery
-from aiogram.filters import CommandStart, Command
+from aiogram.types import Message, CallbackQuery, ChatMemberUpdated
+from aiogram.filters import CommandStart, Command, ChatMemberUpdatedFilter, KICKED, LEFT, RESTRICTED, MEMBER, ADMINISTRATOR, CREATOR
 from aiogram.fsm.context import FSMContext
 from datetime import datetime
 
@@ -408,3 +408,63 @@ async def process_vote(callback: CallbackQuery, bot: Bot):
                 await db.update_poll(poll_id, status="finished")
     else:
         await callback.answer(get_text("already_voted", user.language), show_alert=True)
+
+
+# ============ CHANNEL LEAVE DETECTION ============
+@router.chat_member(ChatMemberUpdatedFilter(member_status_changed=(MEMBER | ADMINISTRATOR | CREATOR) >> (LEFT | KICKED)))
+async def on_user_left_channel(event: ChatMemberUpdated, bot: Bot):
+    """Handle when user leaves or is kicked from channel - cancel their votes."""
+    user_id = event.from_user.id
+    channel_id = event.chat.id
+
+    # Get user from database
+    user = await db.get_user(user_id)
+    if not user:
+        return
+
+    # Get user's active votes in this channel
+    votes = await db.get_user_active_votes_in_channel(user_id, channel_id)
+
+    if not votes:
+        return
+
+    cancelled_polls = []
+
+    for vote in votes:
+        # Cancel the vote
+        success = await db.cancel_vote(vote['vote_id'], vote['option_id'])
+        if success:
+            cancelled_polls.append(vote['poll_name'])
+
+            # Update poll message in channel to reflect new vote count
+            try:
+                poll = await db.get_poll(vote['poll_id'])
+                if poll and poll.message_id:
+                    options = await db.get_poll_options(vote['poll_id'])
+                    show_results = poll.results_visibility == "realtime"
+
+                    if show_results:
+                        keyboard = poll_options_keyboard(vote['poll_id'], options, poll.button_layout, show_results)
+                        await bot.edit_message_reply_markup(
+                            chat_id=channel_id,
+                            message_id=poll.message_id,
+                            reply_markup=keyboard
+                        )
+            except Exception:
+                pass
+
+    # Send notification to user
+    if cancelled_polls:
+        polls_text = "\n".join([f"• {name}" for name in cancelled_polls])
+        message = (
+            f"⚠️ <b>Ovozingiz bekor qilindi!</b>\n\n"
+            f"Siz kanaldan chiqib ketganingiz sababli quyidagi so'rovnomalardagi ovozlaringiz bekor qilindi:\n\n"
+            f"{polls_text}\n\n"
+            f"Qayta ovoz berish uchun kanalga obuna bo'ling va so'rovnomada qaytadan ovoz bering."
+        )
+
+        try:
+            await bot.send_message(user_id, message, parse_mode="HTML")
+        except Exception:
+            # User may have blocked the bot
+            pass

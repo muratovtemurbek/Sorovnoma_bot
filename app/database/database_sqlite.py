@@ -561,6 +561,36 @@ class Database:
                 result.append(data)
             return result
 
+    async def get_user_active_votes_in_channel(self, telegram_id: int, channel_id: int) -> List[dict]:
+        """Get user's votes in active polls for a specific channel."""
+        conn = await self._get_connection()
+        async with conn.execute('''
+            SELECT v.id as vote_id, v.poll_id, v.option_id, p.name as poll_name,
+                   p.channel_id, p.message_id, po.name as option_name
+            FROM votes v
+            JOIN users u ON v.user_id = u.id
+            JOIN polls p ON v.poll_id = p.id
+            JOIN poll_options po ON v.option_id = po.id
+            WHERE u.telegram_id = ? AND p.channel_id = ? AND p.status = 'active'
+        ''', (telegram_id, channel_id)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def cancel_vote(self, vote_id: int, option_id: int) -> bool:
+        """Cancel a vote and decrement the option vote count."""
+        conn = await self._get_connection()
+        # Delete the vote
+        cursor = await conn.execute("DELETE FROM votes WHERE id = ?", (vote_id,))
+        if cursor.rowcount > 0:
+            # Decrement the option vote count
+            await conn.execute(
+                "UPDATE poll_options SET votes_count = MAX(0, votes_count - 1) WHERE id = ?",
+                (option_id,)
+            )
+            await conn.commit()
+            return True
+        return False
+
     async def get_user_votes_history(self, telegram_id: int) -> List[dict]:
         conn = await self._get_connection()
         async with conn.execute('''
