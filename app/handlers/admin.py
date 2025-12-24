@@ -1981,3 +1981,29 @@ async def cancel_admin(callback: CallbackQuery, state: FSMContext):
         f"👨‍💼 {get_text('admins', 'uz')}",
         reply_markup=admins_menu_keyboard("uz")
     )
+
+
+# ============ GENERIC HANDLERS ============
+@router.callback_query(F.data == "cancel")
+async def generic_cancel(callback: CallbackQuery, state: FSMContext):
+    """Generic cancel handler - clears state and returns to admin panel."""
+    await state.clear()
+    admin = await db.get_admin(callback.from_user.id)
+    if admin:
+        await callback.message.delete()
+        await callback.message.answer(
+            get_text("admin_panel", "uz"),
+            reply_markup=admin_menu_keyboard("uz", admin.is_super_admin)
+        )
+    else:
+        await callback.answer("Bekor qilindi", show_alert=True)
+        try:
+            await callback.message.delete()
+        except:
+            pass
+
+
+@router.callback_query(F.data == "confirm")
+async def generic_confirm(callback: CallbackQuery, state: FSMContext):
+    """Generic confirm handler - just acknowledges."""
+    await callback.answer("Tasdiqlandi!", show_alert=True)
