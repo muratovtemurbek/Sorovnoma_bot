@@ -1,0 +1,6 @@
+aiogram>=3.0.0
+asyncpg
+redis
+python-dotenv
+openpyxl
+aiohttp
