@@ -706,10 +706,10 @@ async def poll_options_count(message: Message, state: FSMContext):
     """Enter number of options."""
     try:
         count = int(message.text)
-        if not 2 <= count <= 10:
+        if not 2 <= count <= 50:
             raise ValueError
     except ValueError:
-        await message.answer("2 dan 10 gacha son kiriting!")
+        await message.answer("2 dan 50 gacha son kiriting!")
         return
 
     await state.update_data(options_count=count, options=[], current_option=1)
