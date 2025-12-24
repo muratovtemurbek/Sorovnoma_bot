@@ -25,7 +25,7 @@ from app.keyboards.keyboards import (
 )
 from app.utils.helpers import check_bot_admin, get_channel_info
 from app.utils.excel import create_users_excel, create_poll_results_excel, create_statistics_excel
-from app.config import SUPER_ADMIN_ID, PERMISSIONS
+from app.config import SUPER_ADMIN_ID, SUPER_ADMIN_IDS, PERMISSIONS
 
 router = Router()
 
@@ -55,7 +55,7 @@ async def cmd_admin(message: Message):
 
     if not admin:
         # Check if this is super admin first time
-        if message.from_user.id == SUPER_ADMIN_ID:
+        if message.from_user.id in SUPER_ADMIN_IDS:
             admin = await db.create_admin(
                 telegram_id=message.from_user.id,
                 full_name=message.from_user.full_name,
