@@ -20,9 +20,9 @@ class AdminPollState(StatesGroup):
     select_content_type = State()
     enter_text = State()
     send_media = State()
-    enter_options_count = State()
     enter_option_name = State()
     send_option_photo = State()
+    confirm_options = State()  # Davom etish yoki to'xtatish
     select_layout = State()
     select_start_time = State()
     enter_schedule_date = State()

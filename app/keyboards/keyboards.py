@@ -98,6 +98,15 @@ def skip_keyboard(lang: str = "uz") -> InlineKeyboardMarkup:
     ])
 
 
+def option_continue_keyboard(options_count: int, lang: str = "uz") -> InlineKeyboardMarkup:
+    """Continue or stop adding options keyboard."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"➕ Davom etish ({options_count} ta nomzod)", callback_data="option_continue")],
+        [InlineKeyboardButton(text=f"✅ To'xtatish va davom etish", callback_data="option_stop")],
+        [InlineKeyboardButton(text=f"❌ {get_text('cancel', lang)}", callback_data="cancel_poll")]
+    ])
+
+
 # ============ ADMIN KEYBOARDS ============
 
 def admin_menu_keyboard(lang: str = "uz", is_super: bool = False) -> ReplyKeyboardMarkup:

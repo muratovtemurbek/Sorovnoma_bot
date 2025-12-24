@@ -21,9 +21,21 @@ router = Router()
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext):
+async def cmd_start(message: Message, state: FSMContext, bot: Bot):
     """Handle /start command."""
     user = await db.get_user(message.from_user.id)
+
+    # Check if coming from vote registration link
+    start_param = message.text.split(" ", 1)[1] if " " in message.text else None
+    from_vote = start_param and (start_param == "register" or start_param.startswith("vote_"))
+
+    # Kanal ID ni olish
+    channel_id = None
+    if start_param and start_param.startswith("vote_"):
+        try:
+            channel_id = int(start_param.split("_")[1])
+        except (ValueError, IndexError):
+            pass
 
     if user:
         # User already registered
@@ -31,17 +43,54 @@ async def cmd_start(message: Message, state: FSMContext):
             await message.answer(get_text("user_is_blocked", user.language))
             return
 
-        await message.answer(
-            get_text("main_menu", user.language),
-            reply_markup=main_menu_keyboard(user.language)
-        )
+        if from_vote and channel_id:
+            # Kanalga qaytish tugmasini ko'rsatish
+            channel = await db.get_channel(channel_id)
+            if channel:
+                from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                if channel.username:
+                    channel_url = f"https://t.me/{channel.username.lstrip('@')}"
+                else:
+                    channel_url = f"https://t.me/c/{str(channel_id)[4:]}"
+
+                back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📢 Kanalga qaytish", url=channel_url)]
+                ])
+                await message.answer(
+                    "✅ Siz allaqachon ro'yxatdan o'tgansiz!\n\n"
+                    "Endi kanalga qaytib so'rovnomada ovoz berishingiz mumkin.",
+                    reply_markup=back_keyboard
+                )
+            else:
+                await message.answer(
+                    "✅ Siz allaqachon ro'yxatdan o'tgansiz!\n\n"
+                    "Endi kanalga qaytib so'rovnomada ovoz berishingiz mumkin.",
+                    reply_markup=main_menu_keyboard(user.language)
+                )
+        else:
+            await message.answer(
+                get_text("main_menu", user.language),
+                reply_markup=main_menu_keyboard(user.language)
+            )
         return
 
     # New user - start registration
-    await message.answer(
-        get_text("choose_language", "uz"),
-        reply_markup=language_keyboard()
-    )
+    # Kanal ID ni state ga saqlash
+    if channel_id:
+        await state.update_data(return_channel_id=channel_id)
+
+    if from_vote:
+        await message.answer(
+            "📝 <b>Ovoz berish uchun ro'yxatdan o'ting!</b>\n\n"
+            "Avval tilni tanlang:",
+            reply_markup=language_keyboard(),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            get_text("choose_language", "uz"),
+            reply_markup=language_keyboard()
+        )
     await state.set_state(RegistrationState.language)
 
 
@@ -186,11 +235,38 @@ async def process_captcha(message: Message, state: FSMContext):
         if spam_score > 0:
             await db.update_user(message.from_user.id, spam_score=spam_score)
 
+        # Kanalga qaytish tugmasini tekshirish
+        return_channel_id = data.get("return_channel_id")
         await state.clear()
-        await message.answer(
-            get_text("registration_complete", lang),
-            reply_markup=main_menu_keyboard(lang)
-        )
+
+        if return_channel_id:
+            # Kanalga qaytish tugmasini ko'rsatish
+            channel = await db.get_channel(return_channel_id)
+            if channel:
+                from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                if channel.username:
+                    channel_url = f"https://t.me/{channel.username.lstrip('@')}"
+                else:
+                    channel_url = f"https://t.me/c/{str(return_channel_id)[4:]}"
+
+                back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📢 Kanalga qaytish va ovoz berish", url=channel_url)]
+                ])
+                await message.answer(
+                    get_text("registration_complete", lang) + "\n\n"
+                    "✅ Endi kanalga qaytib so'rovnomada ovoz berishingiz mumkin!",
+                    reply_markup=back_keyboard
+                )
+            else:
+                await message.answer(
+                    get_text("registration_complete", lang),
+                    reply_markup=main_menu_keyboard(lang)
+                )
+        else:
+            await message.answer(
+                get_text("registration_complete", lang),
+                reply_markup=main_menu_keyboard(lang)
+            )
     else:
         # Wrong answer
         attempts = captcha.attempts + 1
@@ -357,7 +433,40 @@ async def process_vote(callback: CallbackQuery, bot: Bot):
     # Check if user is registered
     user = await db.get_user(callback.from_user.id)
     if not user:
-        await callback.answer(get_text("must_register", "uz"), show_alert=True)
+        # Foydalanuvchi ro'yxatdan o'tmagan - botga yo'naltirish
+        bot_info = await bot.get_me()
+
+        # Kanal ma'lumotlarini olish
+        poll = await db.get_poll(poll_id)
+        channel_id = poll.channel_id if poll else None
+
+        # Start parametriga kanal ID ni qo'shish
+        bot_url = f"https://t.me/{bot_info.username}?start=vote_{channel_id}" if channel_id else f"https://t.me/{bot_info.username}?start=register"
+
+        # Foydalanuvchiga shaxsiy xabar yuborishga harakat qilish
+        try:
+            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+            register_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📝 Ro'yxatdan o'tish", url=bot_url)]
+            ])
+            await bot.send_message(
+                callback.from_user.id,
+                "⚠️ <b>Ovoz berish uchun ro'yxatdan o'tish kerak!</b>\n\n"
+                "So'rovnomada ovoz berish uchun avval botda ro'yxatdan o'ting.\n"
+                "Quyidagi tugmani bosing:",
+                reply_markup=register_keyboard,
+                parse_mode="HTML"
+            )
+            await callback.answer(
+                "📝 Ro'yxatdan o'tish uchun botga o'ting!",
+                show_alert=True
+            )
+        except Exception:
+            # Foydalanuvchi botni hali ishga tushirmagan
+            await callback.answer(
+                f"📝 Ovoz berish uchun avval @{bot_info.username} botida ro'yxatdan o'ting!",
+                show_alert=True
+            )
         return
 
     if user.is_blocked:

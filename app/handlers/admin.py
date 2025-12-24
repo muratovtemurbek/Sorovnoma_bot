@@ -21,7 +21,7 @@ from app.keyboards.keyboards import (
     back_keyboard, skip_keyboard, select_channels_keyboard,
     post_content_type_keyboard, post_time_keyboard, post_repeat_keyboard,
     post_buttons_keyboard, post_preview_keyboard, scheduled_posts_list_keyboard,
-    post_actions_keyboard
+    post_actions_keyboard, option_continue_keyboard
 )
 from app.utils.helpers import check_bot_admin, get_channel_info
 from app.utils.excel import create_users_excel, create_poll_results_excel, create_statistics_excel
@@ -682,8 +682,10 @@ async def poll_enter_text(message: Message, state: FSMContext):
         await message.answer(get_text("send_media", "uz"))
         await state.set_state(AdminPollState.send_media)
     else:
-        await message.answer(get_text("enter_options_count", "uz"))
-        await state.set_state(AdminPollState.enter_options_count)
+        # Nomzodlarni qo'shishni boshlash
+        await state.update_data(options=[], current_option=1)
+        await message.answer(get_text("enter_option_name", "uz", n=1))
+        await state.set_state(AdminPollState.enter_option_name)
 
 
 @router.message(AdminPollState.send_media, F.photo | F.video)
@@ -697,22 +699,8 @@ async def poll_receive_media(message: Message, state: FSMContext):
         media_type = "video"
 
     await state.update_data(media_id=media_id, media_type=media_type)
-    await message.answer(get_text("enter_options_count", "uz"))
-    await state.set_state(AdminPollState.enter_options_count)
-
-
-@router.message(AdminPollState.enter_options_count)
-async def poll_options_count(message: Message, state: FSMContext):
-    """Enter number of options."""
-    try:
-        count = int(message.text)
-        if not 2 <= count <= 50:
-            raise ValueError
-    except ValueError:
-        await message.answer("2 dan 50 gacha son kiriting!")
-        return
-
-    await state.update_data(options_count=count, options=[], current_option=1)
+    # Nomzodlarni qo'shishni boshlash
+    await state.update_data(options=[], current_option=1)
     await message.answer(get_text("enter_option_name", "uz", n=1))
     await state.set_state(AdminPollState.enter_option_name)
 
@@ -751,21 +739,45 @@ async def poll_option_photo(message: Message, state: FSMContext):
 
 
 async def process_next_option(message: Message, state: FSMContext):
-    """Process next option or move to layout selection."""
+    """Process next option - show continue or stop buttons."""
     data = await state.get_data()
-    current = data.get("current_option", 1)
-    count = data.get("options_count", 2)
+    options = data.get("options", [])
+    options_count = len(options)
 
-    if current < count:
-        await state.update_data(current_option=current + 1)
-        await message.answer(get_text("enter_option_name", "uz", n=current + 1))
+    # Kamida 2 ta nomzod bo'lishi kerak
+    if options_count < 2:
+        await state.update_data(current_option=options_count + 1)
+        await message.answer(get_text("enter_option_name", "uz", n=options_count + 1))
         await state.set_state(AdminPollState.enter_option_name)
     else:
+        # 2 yoki undan ko'p nomzod bo'lsa - davom etish yoki to'xtatish so'raladi
         await message.answer(
-            get_text("select_layout", "uz"),
-            reply_markup=button_layout_keyboard("uz")
+            f"✅ {options_count} ta nomzod qo'shildi.\n\nYana nomzod qo'shishni xohlaysizmi?",
+            reply_markup=option_continue_keyboard(options_count, "uz")
         )
-        await state.set_state(AdminPollState.select_layout)
+        await state.set_state(AdminPollState.confirm_options)
+
+
+@router.callback_query(F.data == "option_continue", AdminPollState.confirm_options)
+async def option_continue_handler(callback: CallbackQuery, state: FSMContext):
+    """Continue adding more options."""
+    data = await state.get_data()
+    options = data.get("options", [])
+    next_option = len(options) + 1
+
+    await state.update_data(current_option=next_option)
+    await callback.message.edit_text(get_text("enter_option_name", "uz", n=next_option))
+    await state.set_state(AdminPollState.enter_option_name)
+
+
+@router.callback_query(F.data == "option_stop", AdminPollState.confirm_options)
+async def option_stop_handler(callback: CallbackQuery, state: FSMContext):
+    """Stop adding options and move to layout selection."""
+    await callback.message.edit_text(
+        get_text("select_layout", "uz"),
+        reply_markup=button_layout_keyboard("uz")
+    )
+    await state.set_state(AdminPollState.select_layout)
 
 
 @router.callback_query(F.data.startswith("layout_"), AdminPollState.select_layout)
