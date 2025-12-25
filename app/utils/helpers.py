@@ -10,10 +10,22 @@ async def check_subscription(bot: Bot, user_id: int, channels: List[Channel]) ->
     """
     Check user subscription to channels.
     Returns list of channels user is NOT subscribed to.
+    Note: Instagram and Telegram bot subscriptions cannot be verified programmatically,
+    so they are included in the list for user to manually confirm.
     """
     not_subscribed = []
 
     for channel in channels:
+        channel_type = getattr(channel, 'channel_type', 'telegram_channel')
+
+        # Instagram va Telegram bot obunasini tekshirib bo'lmaydi
+        # Foydalanuvchi o'zi tekshirishi kerak
+        if channel_type in ["instagram", "telegram_bot"]:
+            # Bu turlar uchun tekshirish imkoni yo'q, shuning uchun
+            # foydalanuvchi "Tekshirish" tugmasini bosganda ishoniladi
+            continue
+
+        # Faqat Telegram kanallar uchun obunani tekshirish
         try:
             member = await bot.get_chat_member(channel.channel_id, user_id)
             if member.status in [ChatMemberStatus.LEFT, ChatMemberStatus.KICKED]:

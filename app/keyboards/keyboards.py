@@ -22,11 +22,22 @@ def subscription_keyboard(channels: List[Channel], lang: str = "uz") -> InlineKe
     """Mandatory subscription channels keyboard."""
     buttons = []
     for channel in channels:
-        if channel.username:
+        # Kanal turiga qarab URL yaratish
+        channel_type = getattr(channel, 'channel_type', 'telegram_channel')
+        if channel_type == "instagram":
+            url = f"https://instagram.com/{channel.username.lstrip('@')}"
+            icon = "📸"
+        elif channel_type == "telegram_bot":
             url = f"https://t.me/{channel.username.lstrip('@')}"
-        else:
-            url = f"https://t.me/c/{str(channel.channel_id)[4:]}"
-        buttons.append([InlineKeyboardButton(text=channel.title, url=url)])
+            icon = "🤖"
+        else:  # telegram_channel
+            if channel.username:
+                url = f"https://t.me/{channel.username.lstrip('@')}"
+            else:
+                # Private kanal uchun to'g'ri URL yaratish
+                url = f"https://t.me/c/{str(abs(channel.channel_id))[3:]}"
+            icon = "📢"
+        buttons.append([InlineKeyboardButton(text=f"{icon} {channel.title}", url=url)])
 
     buttons.append([InlineKeyboardButton(
         text=f"✅ {get_text('check_subscription', lang)}",
@@ -138,13 +149,31 @@ def channels_menu_keyboard(lang: str = "uz") -> InlineKeyboardMarkup:
     ])
 
 
+def channel_type_keyboard(lang: str = "uz") -> InlineKeyboardMarkup:
+    """Channel type selection keyboard."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Telegram kanal", callback_data="chtype_telegram_channel")],
+        [InlineKeyboardButton(text="🤖 Telegram bot", callback_data="chtype_telegram_bot")],
+        [InlineKeyboardButton(text="📸 Instagram", callback_data="chtype_instagram")],
+        [InlineKeyboardButton(text=f"◀️ {get_text('back', lang)}", callback_data="channels_menu")]
+    ])
+
+
 def channel_list_keyboard(channels: List[Channel], lang: str = "uz") -> InlineKeyboardMarkup:
     """List of channels keyboard."""
     buttons = []
     for channel in channels:
         status = "✅" if channel.is_active else "❌"
+        # Kanal turiga qarab ikon
+        channel_type = getattr(channel, 'channel_type', 'telegram_channel')
+        if channel_type == "instagram":
+            icon = "📸"
+        elif channel_type == "telegram_bot":
+            icon = "🤖"
+        else:
+            icon = "📢"
         buttons.append([InlineKeyboardButton(
-            text=f"{status} {channel.title}",
+            text=f"{status} {icon} {channel.title}",
             callback_data=f"channel_{channel.channel_id}"
         )])
     buttons.append([InlineKeyboardButton(text=f"◀️ {get_text('back', lang)}",
@@ -157,16 +186,23 @@ def channel_settings_keyboard(channel: Channel, lang: str = "uz") -> InlineKeybo
     mandatory = "✅" if channel.is_mandatory else "❌"
     poll_ch = "✅" if channel.is_poll_channel else "❌"
     active = "✅" if channel.is_active else "❌"
+    channel_type = getattr(channel, 'channel_type', 'telegram_channel')
 
-    return InlineKeyboardMarkup(inline_keyboard=[
+    buttons = [
         [InlineKeyboardButton(
             text=f"{mandatory} {get_text('mandatory_sub', lang)}",
             callback_data=f"toggle_mandatory_{channel.channel_id}"
-        )],
-        [InlineKeyboardButton(
+        )]
+    ]
+
+    # Faqat Telegram kanallar uchun poll_channel tugmasi
+    if channel_type == "telegram_channel":
+        buttons.append([InlineKeyboardButton(
             text=f"{poll_ch} {get_text('poll_channel', lang)}",
             callback_data=f"toggle_poll_{channel.channel_id}"
-        )],
+        )])
+
+    buttons.extend([
         [InlineKeyboardButton(
             text=f"{active} Faol",
             callback_data=f"toggle_active_{channel.channel_id}"
@@ -178,6 +214,8 @@ def channel_settings_keyboard(channel: Channel, lang: str = "uz") -> InlineKeybo
         [InlineKeyboardButton(text=f"◀️ {get_text('back', lang)}",
                                callback_data="channel_list")]
     ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def polls_menu_keyboard(lang: str = "uz") -> InlineKeyboardMarkup:

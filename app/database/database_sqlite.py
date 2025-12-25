@@ -76,6 +76,7 @@ class Database:
                 channel_id INTEGER UNIQUE NOT NULL,
                 username TEXT,
                 title TEXT NOT NULL,
+                channel_type TEXT DEFAULT 'telegram_channel',
                 is_mandatory INTEGER DEFAULT 0,
                 is_poll_channel INTEGER DEFAULT 1,
                 is_active INTEGER DEFAULT 1,
@@ -83,6 +84,12 @@ class Database:
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Add channel_type column if not exists (migration)
+        try:
+            await conn.execute("ALTER TABLE channels ADD COLUMN channel_type TEXT DEFAULT 'telegram_channel'")
+            await conn.commit()
+        except:
+            pass
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS polls (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -285,18 +292,20 @@ class Database:
                 data['is_mandatory'] = bool(data['is_mandatory'])
                 data['is_poll_channel'] = bool(data['is_poll_channel'])
                 data['is_active'] = bool(data['is_active'])
+                data['channel_type'] = data.get('channel_type', 'telegram_channel') or 'telegram_channel'
                 data['created_at'] = datetime.fromisoformat(data['created_at']) if data['created_at'] else datetime.now()
                 return Channel(**data)
             return None
 
     async def create_channel(self, channel_id: int, title: str, username: str = None,
+                             channel_type: str = "telegram_channel",
                              is_mandatory: bool = False, is_poll_channel: bool = True,
                              added_by: int = 0) -> Channel:
         conn = await self._get_connection()
         await conn.execute('''
-            INSERT INTO channels (channel_id, username, title, is_mandatory, is_poll_channel, added_by)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (channel_id, username, title, int(is_mandatory), int(is_poll_channel), added_by))
+            INSERT INTO channels (channel_id, username, title, channel_type, is_mandatory, is_poll_channel, added_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (channel_id, username, title, channel_type, int(is_mandatory), int(is_poll_channel), added_by))
         await conn.commit()
         return await self.get_channel(channel_id)
 
@@ -329,6 +338,7 @@ class Database:
                 data['is_mandatory'] = bool(data['is_mandatory'])
                 data['is_poll_channel'] = bool(data['is_poll_channel'])
                 data['is_active'] = bool(data['is_active'])
+                data['channel_type'] = data.get('channel_type', 'telegram_channel') or 'telegram_channel'
                 data['created_at'] = datetime.fromisoformat(data['created_at']) if data['created_at'] else datetime.now()
                 channels.append(Channel(**data))
             return channels
@@ -343,6 +353,7 @@ class Database:
                 data['is_mandatory'] = bool(data['is_mandatory'])
                 data['is_poll_channel'] = bool(data['is_poll_channel'])
                 data['is_active'] = bool(data['is_active'])
+                data['channel_type'] = data.get('channel_type', 'telegram_channel') or 'telegram_channel'
                 data['created_at'] = datetime.fromisoformat(data['created_at']) if data['created_at'] else datetime.now()
                 channels.append(Channel(**data))
             return channels
@@ -357,6 +368,7 @@ class Database:
                 data['is_mandatory'] = bool(data['is_mandatory'])
                 data['is_poll_channel'] = bool(data['is_poll_channel'])
                 data['is_active'] = bool(data['is_active'])
+                data['channel_type'] = data.get('channel_type', 'telegram_channel') or 'telegram_channel'
                 data['created_at'] = datetime.fromisoformat(data['created_at']) if data['created_at'] else datetime.now()
                 channels.append(Channel(**data))
             return channels

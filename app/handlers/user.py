@@ -51,7 +51,9 @@ async def cmd_start(message: Message, state: FSMContext, bot: Bot):
                 if channel.username:
                     channel_url = f"https://t.me/{channel.username.lstrip('@')}"
                 else:
-                    channel_url = f"https://t.me/c/{str(channel_id)[4:]}"
+                    # Private kanal uchun to'g'ri URL yaratish
+                    # Kanal ID: -1001234567890 -> 1234567890
+                    channel_url = f"https://t.me/c/{str(abs(channel_id))[3:]}"
 
                 back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="📢 Kanalga qaytish", url=channel_url)]
@@ -247,7 +249,8 @@ async def process_captcha(message: Message, state: FSMContext):
                 if channel.username:
                     channel_url = f"https://t.me/{channel.username.lstrip('@')}"
                 else:
-                    channel_url = f"https://t.me/c/{str(return_channel_id)[4:]}"
+                    # Private kanal uchun to'g'ri URL yaratish
+                    channel_url = f"https://t.me/c/{str(abs(return_channel_id))[3:]}"
 
                 back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="📢 Kanalga qaytish va ovoz berish", url=channel_url)]

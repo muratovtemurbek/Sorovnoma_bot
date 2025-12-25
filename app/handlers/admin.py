@@ -21,7 +21,7 @@ from app.keyboards.keyboards import (
     back_keyboard, skip_keyboard, select_channels_keyboard,
     post_content_type_keyboard, post_time_keyboard, post_repeat_keyboard,
     post_buttons_keyboard, post_preview_keyboard, scheduled_posts_list_keyboard,
-    post_actions_keyboard, option_continue_keyboard
+    post_actions_keyboard, option_continue_keyboard, channel_type_keyboard
 )
 from app.utils.helpers import check_bot_admin, get_channel_info
 from app.utils.excel import create_users_excel, create_poll_results_excel, create_statistics_excel
@@ -97,17 +97,92 @@ async def channels_menu_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "add_channel")
 async def add_channel_start(callback: CallbackQuery, state: FSMContext):
-    """Start adding a channel."""
+    """Start adding a channel - show type selection."""
     await callback.message.edit_text(
-        get_text("enter_channel", "uz"),
-        reply_markup=back_keyboard("uz", "channels_menu")
+        "📢 Kanal turini tanlang:",
+        reply_markup=channel_type_keyboard("uz")
     )
-    await state.set_state(AdminChannelState.waiting_channel)
+    await state.set_state(AdminChannelState.select_type)
+
+
+@router.callback_query(F.data.startswith("chtype_"), AdminChannelState.select_type)
+async def process_channel_type(callback: CallbackQuery, state: FSMContext):
+    """Process channel type selection."""
+    channel_type = callback.data.replace("chtype_", "")
+    await state.update_data(channel_type=channel_type)
+
+    if channel_type == "telegram_channel":
+        await callback.message.edit_text(
+            "📢 Telegram kanal ID yoki @username kiriting:",
+            reply_markup=back_keyboard("uz", "add_channel")
+        )
+        await state.set_state(AdminChannelState.waiting_channel)
+    elif channel_type == "telegram_bot":
+        await callback.message.edit_text(
+            "🤖 Telegram bot @username kiriting (masalan: @mybot):",
+            reply_markup=back_keyboard("uz", "add_channel")
+        )
+        await state.set_state(AdminChannelState.waiting_channel)
+    elif channel_type == "instagram":
+        await callback.message.edit_text(
+            "📸 Instagram username kiriting (masalan: @myinstagram):",
+            reply_markup=back_keyboard("uz", "add_channel")
+        )
+        await state.set_state(AdminChannelState.enter_instagram)
 
 
 @router.message(AdminChannelState.waiting_channel)
 async def add_channel_process(message: Message, state: FSMContext, bot: Bot):
-    """Process channel input."""
+    """Process Telegram channel/bot input."""
+    data = await state.get_data()
+    channel_type = data.get("channel_type", "telegram_channel")
+
+    if channel_type == "telegram_bot":
+        # Telegram bot uchun
+        username = message.text.strip().lstrip("@")
+        if not username:
+            await message.answer("❌ Username kiriting!")
+            return
+
+        # Bot mavjudligini tekshirish
+        try:
+            bot_info = await bot.get_chat(f"@{username}")
+            if bot_info.type != "private":
+                await message.answer("❌ Bu bot emas! Bot username kiriting.")
+                return
+        except Exception:
+            await message.answer("❌ Bot topilmadi! Username to'g'riligini tekshiring.")
+            return
+
+        # Unikal ID yaratish (bot uchun)
+        import hashlib
+        channel_id = int(hashlib.md5(username.encode()).hexdigest()[:15], 16)
+
+        # Mavjudligini tekshirish
+        existing = await db.get_channel(channel_id)
+        if existing:
+            await message.answer("❌ Bu bot allaqachon qo'shilgan!")
+            await state.clear()
+            return
+
+        await db.create_channel(
+            channel_id=channel_id,
+            title=f"🤖 @{username}",
+            username=username,
+            channel_type="telegram_bot",
+            is_poll_channel=False,
+            added_by=message.from_user.id
+        )
+
+        await message.answer(f"✅ Telegram bot qo'shildi: @{username}")
+        await state.clear()
+        await message.answer(
+            f"📢 {get_text('channels', 'uz')}",
+            reply_markup=channels_menu_keyboard("uz")
+        )
+        return
+
+    # Telegram kanal uchun
     channel_info = await get_channel_info(bot, message.text.strip())
 
     if not channel_info:
@@ -130,6 +205,7 @@ async def add_channel_process(message: Message, state: FSMContext, bot: Bot):
         channel_id=channel_info["channel_id"],
         title=channel_info["title"],
         username=channel_info["username"],
+        channel_type="telegram_channel",
         added_by=message.from_user.id
     )
 
@@ -137,6 +213,43 @@ async def add_channel_process(message: Message, state: FSMContext, bot: Bot):
     await state.clear()
 
     # Show channels menu
+    await message.answer(
+        f"📢 {get_text('channels', 'uz')}",
+        reply_markup=channels_menu_keyboard("uz")
+    )
+
+
+@router.message(AdminChannelState.enter_instagram)
+async def add_instagram_process(message: Message, state: FSMContext):
+    """Process Instagram username input."""
+    username = message.text.strip().lstrip("@")
+
+    if not username:
+        await message.answer("❌ Instagram username kiriting!")
+        return
+
+    # Unikal ID yaratish
+    import hashlib
+    channel_id = int(hashlib.md5(f"ig_{username}".encode()).hexdigest()[:15], 16)
+
+    # Mavjudligini tekshirish
+    existing = await db.get_channel(channel_id)
+    if existing:
+        await message.answer("❌ Bu Instagram akkaunt allaqachon qo'shilgan!")
+        await state.clear()
+        return
+
+    await db.create_channel(
+        channel_id=channel_id,
+        title=f"📸 @{username}",
+        username=username,
+        channel_type="instagram",
+        is_poll_channel=False,
+        added_by=message.from_user.id
+    )
+
+    await message.answer(f"✅ Instagram akkaunt qo'shildi: @{username}")
+    await state.clear()
     await message.answer(
         f"📢 {get_text('channels', 'uz')}",
         reply_markup=channels_menu_keyboard("uz")
@@ -168,9 +281,23 @@ async def show_channel_settings(callback: CallbackQuery):
         await callback.answer("Kanal topilmadi", show_alert=True)
         return
 
+    # Kanal turi nomi
+    type_names = {
+        "telegram_channel": "📢 Telegram kanal",
+        "telegram_bot": "🤖 Telegram bot",
+        "instagram": "📸 Instagram"
+    }
+    channel_type = getattr(channel, 'channel_type', 'telegram_channel')
+    type_name = type_names.get(channel_type, "📢 Telegram kanal")
+
+    text = f"{get_text('channel_settings', 'uz')}\n\n<b>{channel.title}</b>\nTuri: {type_name}"
+    if channel.username:
+        text += f"\nUsername: @{channel.username}"
+
     await callback.message.edit_text(
-        f"{get_text('channel_settings', 'uz')}\n\n{channel.title}",
-        reply_markup=channel_settings_keyboard(channel, "uz")
+        text,
+        reply_markup=channel_settings_keyboard(channel, "uz"),
+        parse_mode="HTML"
     )
 
 

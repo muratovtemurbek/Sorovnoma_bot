@@ -35,6 +35,7 @@ class Channel:
     channel_id: int = 0
     username: Optional[str] = None
     title: str = ""
+    channel_type: str = "telegram_channel"  # telegram_channel, telegram_bot, instagram
     is_mandatory: bool = False
     is_poll_channel: bool = True
     is_active: bool = True

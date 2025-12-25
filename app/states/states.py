@@ -10,7 +10,10 @@ class RegistrationState(StatesGroup):
 
 
 class AdminChannelState(StatesGroup):
-    waiting_channel = State()
+    select_type = State()  # Kanal turini tanlash
+    waiting_channel = State()  # Telegram kanal/bot uchun
+    enter_instagram = State()  # Instagram username uchun
+    enter_title = State()  # Instagram/bot uchun nom kiritish
     edit_channel = State()
 
 
