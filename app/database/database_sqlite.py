@@ -15,24 +15,32 @@ class Database:
         self._conn = None
 
     async def connect(self):
-        self._conn = await aiosqlite.connect(self.db_path)
+        self._conn = await aiosqlite.connect(self.db_path, timeout=30.0)
         self._conn.row_factory = aiosqlite.Row
         # Ma'lumotlar xavfsizligi uchun FULL synchronous mode
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA synchronous=FULL")
         await self._conn.execute("PRAGMA cache_size=10000")
         await self._conn.execute("PRAGMA wal_autocheckpoint=100")
+        await self._conn.execute("PRAGMA busy_timeout=30000")
         await self.create_tables()
         await self._create_indexes()
         await self._conn.commit()
 
     async def close(self):
         if self._conn:
-            # WAL faylini asosiy bazaga yozish
-            await self._conn.execute("PRAGMA wal_checkpoint(FULL)")
-            await self._conn.commit()
-            await self._conn.close()
-            self._conn = None
+            try:
+                # WAL faylini asosiy bazaga yozish
+                await self._conn.execute("PRAGMA wal_checkpoint(FULL)")
+                await self._conn.commit()
+            except Exception:
+                pass  # Ignore errors during checkpoint
+            finally:
+                try:
+                    await self._conn.close()
+                except Exception:
+                    pass
+                self._conn = None
 
     async def _get_connection(self):
         if self._conn is None:

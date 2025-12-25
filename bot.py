@@ -1,4 +1,5 @@
 import asyncio
+import signal
 import logging
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
@@ -17,6 +18,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global reference to background task
+_background_task: asyncio.Task = None
+
 
 async def on_startup(bot: Bot):
     """Actions on bot startup."""
@@ -33,7 +37,16 @@ async def on_startup(bot: Bot):
 
 async def on_shutdown(bot: Bot):
     """Actions on bot shutdown."""
+    global _background_task
     logger.info("Bot shutting down...")
+
+    # Cancel background task
+    if _background_task and not _background_task.done():
+        _background_task.cancel()
+        try:
+            await _background_task
+        except asyncio.CancelledError:
+            logger.info("Background task cancelled")
 
     # Close database connection
     await db.close()
@@ -136,6 +149,8 @@ async def scheduled_tasks(bot: Bot):
 
 async def main():
     """Main function."""
+    global _background_task
+
     # Initialize bot and dispatcher
     bot = Bot(
         token=BOT_TOKEN,
@@ -160,11 +175,15 @@ async def main():
     dp.shutdown.register(on_shutdown)
 
     # Start background tasks
-    asyncio.create_task(scheduled_tasks(bot))
+    _background_task = asyncio.create_task(scheduled_tasks(bot))
 
     # Start polling
     logger.info("Starting bot polling...")
-    await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    try:
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    finally:
+        # Ensure bot session is closed
+        await bot.session.close()
 
 
 if __name__ == "__main__":
@@ -174,3 +193,5 @@ if __name__ == "__main__":
         logger.info("Bot stopped by user")
     except Exception as e:
         logger.error(f"Bot crashed: {e}")
+        import traceback
+        traceback.print_exc()
