@@ -17,14 +17,20 @@ class Database:
     async def connect(self):
         self._conn = await aiosqlite.connect(self.db_path)
         self._conn.row_factory = aiosqlite.Row
+        # Ma'lumotlar xavfsizligi uchun FULL synchronous mode
         await self._conn.execute("PRAGMA journal_mode=WAL")
-        await self._conn.execute("PRAGMA synchronous=NORMAL")
+        await self._conn.execute("PRAGMA synchronous=FULL")
         await self._conn.execute("PRAGMA cache_size=10000")
+        await self._conn.execute("PRAGMA wal_autocheckpoint=100")
         await self.create_tables()
         await self._create_indexes()
+        await self._conn.commit()
 
     async def close(self):
         if self._conn:
+            # WAL faylini asosiy bazaga yozish
+            await self._conn.execute("PRAGMA wal_checkpoint(FULL)")
+            await self._conn.commit()
             await self._conn.close()
             self._conn = None
 
@@ -282,6 +288,26 @@ class Database:
                 admins.append(Admin(**data))
             return admins
 
+    async def update_admin(self, telegram_id: int, **kwargs) -> Optional[Admin]:
+        """Update admin permissions or other fields."""
+        if not kwargs:
+            return await self.get_admin(telegram_id)
+        if 'permissions' in kwargs:
+            kwargs['permissions'] = json.dumps(kwargs['permissions'])
+        set_clause = ", ".join([f"{k} = ?" for k in kwargs.keys()])
+        values = list(kwargs.values()) + [telegram_id]
+        conn = await self._get_connection()
+        await conn.execute(f"UPDATE admins SET {set_clause} WHERE telegram_id = ?", values)
+        await conn.commit()
+        return await self.get_admin(telegram_id)
+
+    async def delete_admin(self, telegram_id: int) -> bool:
+        """Delete admin by telegram_id."""
+        conn = await self._get_connection()
+        cursor = await conn.execute("DELETE FROM admins WHERE telegram_id = ?", (telegram_id,))
+        await conn.commit()
+        return cursor.rowcount > 0
+
     # ============ CHANNEL METHODS ============
     async def get_channel(self, channel_id: int) -> Optional[Channel]:
         conn = await self._get_connection()
@@ -328,9 +354,14 @@ class Database:
         await conn.commit()
         return cursor.rowcount > 0
 
-    async def get_all_channels(self) -> List[Channel]:
+    async def get_all_channels(self, include_inactive: bool = True) -> List[Channel]:
+        """Get all channels. Set include_inactive=False to only get active channels."""
         conn = await self._get_connection()
-        async with conn.execute("SELECT * FROM channels WHERE is_active = 1 ORDER BY created_at DESC") as cursor:
+        if include_inactive:
+            query = "SELECT * FROM channels ORDER BY created_at DESC"
+        else:
+            query = "SELECT * FROM channels WHERE is_active = 1 ORDER BY created_at DESC"
+        async with conn.execute(query) as cursor:
             rows = await cursor.fetchall()
             channels = []
             for row in rows:
