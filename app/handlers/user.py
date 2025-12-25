@@ -446,27 +446,10 @@ async def process_vote(callback: CallbackQuery, bot: Bot):
         # Start parametriga kanal ID ni qo'shish
         bot_url = f"https://t.me/{bot_info.username}?start=vote_{channel_id}" if channel_id else f"https://t.me/{bot_info.username}?start=register"
 
-        # Foydalanuvchiga shaxsiy xabar yuborishga harakat qilish
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        try:
-            register_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📝 Ro'yxatdan o'tish", url=bot_url)]
-            ])
-            await bot.send_message(
-                callback.from_user.id,
-                "⚠️ <b>Ovoz berish uchun ro'yxatdan o'tish kerak!</b>\n\n"
-                "So'rovnomada ovoz berish uchun avval botda ro'yxatdan o'ting.\n"
-                "Quyidagi tugmani bosing:",
-                reply_markup=register_keyboard,
-                parse_mode="HTML"
-            )
-            await callback.answer()
-        except Exception:
-            # Foydalanuvchi botni hali ishga tushirmagan - URL bilan alert ko'rsatish
-            await callback.answer(
-                f"📝 Ovoz berish uchun ro'yxatdan o'ting:\n{bot_url}",
-                show_alert=True
-            )
+        # Foydalanuvchini to'g'ridan-to'g'ri botga yo'naltirish
+        await callback.answer(
+            url=bot_url
+        )
         return
 
     if user.is_blocked:
