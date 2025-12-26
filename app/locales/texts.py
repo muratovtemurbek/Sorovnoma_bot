@@ -180,7 +180,16 @@ Asosiy buyruqlar:
 /menu - Asosiy menyu
 /help - Yordam
 
-Savol va takliflar uchun: @admin""",
+Savol va takliflar uchun: @developer_4585""",
+
+        # Author
+        "author": "Muallif",
+        "author_text": """👨‍💻 Bot mualliflari:
+
+📌 @q_rahimov
+📌 @developer_4585
+
+Bizga murojaat qilishingiz mumkin!""",
 
         # Errors
         "no_permission": "Sizda bu amalni bajarish uchun ruxsat yo'q!",
@@ -369,7 +378,16 @@ Savol va takliflar uchun: @admin""",
 /menu - Главное меню
 /help - Помощь
 
-По вопросам: @admin""",
+По вопросам: @developer_4585""",
+
+        # Author
+        "author": "Автор",
+        "author_text": """👨‍💻 Авторы бота:
+
+📌 @q_rahimov
+📌 @developer_4585
+
+Вы можете связаться с нами!""",
 
         # Errors
         "no_permission": "У вас нет разрешения на это действие!",
@@ -558,7 +576,16 @@ Main commands:
 /menu - Main menu
 /help - Help
 
-For questions: @admin""",
+For questions: @developer_4585""",
+
+        # Author
+        "author": "Author",
+        "author_text": """👨‍💻 Bot authors:
+
+📌 @q_rahimov
+📌 @developer_4585
+
+Feel free to contact us!""",
 
         # Errors
         "no_permission": "You don't have permission for this action!",

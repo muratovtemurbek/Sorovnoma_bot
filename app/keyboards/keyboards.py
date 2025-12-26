@@ -69,7 +69,8 @@ def main_menu_keyboard(lang: str = "uz") -> ReplyKeyboardMarkup:
             [
                 KeyboardButton(text=f"⚙️ {get_text('settings', lang)}"),
                 KeyboardButton(text=f"ℹ️ {get_text('help', lang)}")
-            ]
+            ],
+            [KeyboardButton(text=f"👨‍💻 {get_text('author', lang)}")]
         ],
         resize_keyboard=True
     )

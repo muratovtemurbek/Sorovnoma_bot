@@ -425,6 +425,14 @@ async def show_help(message: Message):
     await message.answer(get_text("help_text", lang))
 
 
+@router.message(F.text.contains("Muallif") | F.text.contains("Автор") | F.text.contains("Author"))
+async def show_author(message: Message):
+    """Show author information."""
+    user = await db.get_user(message.from_user.id)
+    lang = user.language if user else "uz"
+    await message.answer(get_text("author_text", lang))
+
+
 # Voting handler
 @router.callback_query(F.data.startswith("vote_"))
 async def process_vote(callback: CallbackQuery, bot: Bot):
